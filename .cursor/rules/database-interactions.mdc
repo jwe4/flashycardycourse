@@ -1,0 +1,59 @@
+---
+alwaysApply: true
+description: Guidelines for database interactions using Drizzle ORM
+---
+
+# Database Interaction Guidelines
+
+All database interactions in this project must use Drizzle ORM with the schema and queries defined in [src/db/schema.ts](mdc:src/db/schema.ts).
+
+## Core Principles
+
+1. **Always use the Drizzle schema**: Import table definitions from [src/db/schema.ts](mdc:src/db/schema.ts) for all database operations
+2. **Use Drizzle query builders**: Never write raw SQL queries directly - use Drizzle's type-safe query builders
+3. **Import from db instance**: Use the database instance from [src/lib/db.ts](mdc:src/lib/db.ts) for all queries
+
+## Database Schema
+
+The project uses two main tables:
+- `decks`: User flashcard decks with title, description, and user ID
+- `flashcards`: Individual flashcards belonging to decks with front/back content
+
+## Example Patterns
+
+```typescript
+// Import schema and db instance
+import { db } from '@/lib/db';
+import { decks, flashcards } from '@/db/schema';
+import { eq } from 'drizzle-orm';
+
+// Query example
+const userDecks = await db.select().from(decks).where(eq(decks.userId, userId));
+
+// Insert example
+await db.insert(decks).values({
+  userId: userId,
+  title: 'My Deck',
+  description: 'Description here'
+});
+
+// Update example
+await db.update(flashcards).set({ front: 'New front' }).where(eq(flashcards.id, cardId));
+
+// Delete example
+await db.delete(flashcards).where(eq(flashcards.id, cardId));
+```
+
+## What NOT to Do
+
+- ❌ Don't write raw SQL queries
+- ❌ Don't bypass the Drizzle schema
+- ❌ Don't create database connections outside of the db instance
+- ❌ Don't use other ORMs or query builders
+
+## What TO Do
+
+- ✅ Always import tables from the schema
+- ✅ Use Drizzle's query builders and operators
+- ✅ Leverage TypeScript types from the schema
+- ✅ Use the centralized db instance

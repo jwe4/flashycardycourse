@@ -1,0 +1,159 @@
+# Authentication and Authorization Guidelines
+
+All authentication in this project must be handled by Clerk, and users must only be able to access their own data.
+
+## Core Principles
+
+1. **Always use Clerk for authentication**: Never implement custom authentication - use Clerk's built-in methods
+2. **Verify user identity**: Always get the authenticated user's ID before any data access
+3. **Filter by userId**: All database queries must filter by the authenticated user's ID to prevent unauthorized access
+4. **Never trust client input**: Always verify user ownership on the server side, never rely on client-provided user IDs
+
+## Getting the Authenticated User
+
+```typescript
+import { auth } from '@clerk/nextjs/server';
+
+// In Server Components, API routes, or Server Actions
+const { userId } = await auth();
+
+if (!userId) {
+  // Handle unauthenticated user - redirect or return error
+  redirect('/sign-in');
+  // or return { error: 'Unauthorized' };
+}
+
+// Now use userId to filter database queries
+```
+
+## Securing Database Queries
+
+**ALWAYS** filter database queries by the authenticated user's ID:
+
+```typescript
+import { auth } from '@clerk/nextjs/server';
+import { db } from '@/lib/db';
+import { decks, flashcards } from '@/db/schema';
+import { eq, and } from 'drizzle-orm';
+
+// ✅ CORRECT: Filter by authenticated user
+const { userId } = await auth();
+if (!userId) throw new Error('Unauthorized');
+
+const userDecks = await db.select()
+  .from(decks)
+  .where(eq(decks.userId, userId));
+
+// ✅ CORRECT: Verify ownership before accessing specific resources
+const deck = await db.select()
+  .from(decks)
+  .where(and(
+    eq(decks.id, deckId),
+    eq(decks.userId, userId)
+  ))
+  .limit(1);
+
+if (!deck.length) {
+  throw new Error('Deck not found or unauthorized');
+}
+```
+
+## What NOT to Do
+
+- ❌ Don't accept userId from client-side requests or URL parameters
+- ❌ Don't skip userId verification in database queries
+- ❌ Don't assume authentication - always check `userId`
+- ❌ Don't implement custom auth logic - use Clerk
+- ❌ Don't query data without filtering by userId first
+
+```typescript
+// ❌ WRONG: No user verification
+const allDecks = await db.select().from(decks);
+
+// ❌ WRONG: Using userId from request body (can be spoofed)
+const userDecks = await db.select()
+  .from(decks)
+  .where(eq(decks.userId, request.body.userId));
+
+// ❌ WRONG: Not checking if userId exists
+const { userId } = await auth();
+const userDecks = await db.select().from(decks).where(eq(decks.userId, userId)); // userId could be null!
+```
+
+## What TO Do
+
+- ✅ Always call `await auth()` to get the authenticated user
+- ✅ Check if `userId` is null/undefined before proceeding
+- ✅ Filter ALL database queries by the authenticated user's ID
+- ✅ Use Clerk's middleware (configured in [src/middleware.ts](mdc:src/middleware.ts))
+- ✅ Verify ownership before updates/deletes
+- ✅ Return 401/403 errors for unauthorized access
+
+```typescript
+// ✅ CORRECT: Complete pattern for secure data access
+async function getUserDeck(deckId: string) {
+  const { userId } = await auth();
+  
+  if (!userId) {
+    throw new Error('Unauthorized - please sign in');
+  }
+  
+  const [deck] = await db.select()
+    .from(decks)
+    .where(and(
+      eq(decks.id, deckId),
+      eq(decks.userId, userId)
+    ))
+    .limit(1);
+  
+  if (!deck) {
+    throw new Error('Deck not found or you do not have permission to access it');
+  }
+  
+  return deck;
+}
+```
+
+## Middleware Configuration
+
+The Clerk middleware is configured in [src/middleware.ts](mdc:src/middleware.ts) and protects routes automatically. Ensure it remains properly configured.
+
+## Database Schema Requirements
+
+All user-owned tables must include a `userId` column that references the Clerk user:
+
+- `decks.userId`: Links decks to their owner
+- For related data (like `flashcards`), verify ownership through the parent relationship
+
+When accessing `flashcards`, verify the user owns the parent `deck`:
+
+```typescript
+const { userId } = await auth();
+if (!userId) throw new Error('Unauthorized');
+
+// First verify the user owns the deck
+const [deck] = await db.select()
+  .from(decks)
+  .where(and(
+    eq(decks.id, deckId),
+    eq(decks.userId, userId)
+  ))
+  .limit(1);
+
+if (!deck) throw new Error('Unauthorized');
+
+// Now safe to query flashcards for this deck
+const cards = await db.select()
+  .from(flashcards)
+  .where(eq(flashcards.deckId, deckId));
+```
+
+## Summary
+
+**Every data access must follow this pattern:**
+1. Get userId from `await auth()`
+2. Check if userId exists
+3. Filter database query by userId
+4. Verify ownership before operations
+
+This ensures complete data isolation between users and prevents unauthorized access.

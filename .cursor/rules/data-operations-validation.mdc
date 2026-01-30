@@ -1,0 +1,217 @@
+---
+alwaysApply: true
+---
+
+# Data Operations and Validation Guidelines
+
+This project follows a strict architectural pattern for data operations and validation to ensure type safety, security, and maintainability.
+
+## Core Principles
+
+1. **Server Components for Data Retrieval**: All data fetching from the database must be done in React Server Components
+2. **Server Actions for Mutations**: All database mutations (inserts, updates, deletes) must be implemented as Server Actions
+3. **Zod for Validation**: All data validation must use Zod schemas
+4. **Type-Safe Server Actions**: Server Actions must use TypeScript types for parameters, NOT FormData
+
+## Data Retrieval Pattern
+
+✅ **Correct - Server Component:**
+```typescript
+// app/decks/page.tsx
+import { db } from '@/lib/db';
+import { decks } from '@/db/schema';
+import { eq } from 'drizzle-orm';
+import { auth } from '@clerk/nextjs/server';
+
+export default async function DecksPage() {
+  const { userId } = await auth();
+  if (!userId) return null;
+  
+  // Data retrieval in server component
+  const userDecks = await db.select().from(decks).where(eq(decks.userId, userId));
+  
+  return <div>{/* Render decks */}</div>;
+}
+```
+
+❌ **Incorrect - Client Component with useEffect:**
+```typescript
+// Don't do this!
+'use client';
+export default function DecksPage() {
+  const [decks, setDecks] = useState([]);
+  
+  useEffect(() => {
+    fetch('/api/decks').then(/* ... */);
+  }, []);
+}
+```
+
+## Data Mutation Pattern
+
+✅ **Correct - Server Action with Zod Validation:**
+```typescript
+'use server';
+import { z } from 'zod';
+import { db } from '@/lib/db';
+import { decks } from '@/db/schema';
+import { auth } from '@clerk/nextjs/server';
+
+// Define Zod schema for validation
+const createDeckSchema = z.object({
+  title: z.string().min(1, 'Title is required'),
+  description: z.string().optional(),
+});
+
+// TypeScript type from Zod schema
+type CreateDeckInput = z.infer<typeof createDeckSchema>;
+
+export async function createDeck(input: CreateDeckInput) {
+  // Authenticate user
+  const { userId } = await auth();
+  if (!userId) throw new Error('Unauthorized');
+  
+  // Validate input with Zod
+  const validatedData = createDeckSchema.parse(input);
+  
+  // Perform database mutation
+  const [newDeck] = await db.insert(decks).values({
+    userId,
+    ...validatedData,
+  }).returning();
+  
+  return newDeck;
+}
+```
+
+❌ **Incorrect - Using FormData type:**
+```typescript
+// Don't do this!
+export async function createDeck(formData: FormData) {
+  const title = formData.get('title');
+  // No type safety, no validation
+}
+```
+
+## Server Action Best Practices
+
+### 1. Always Validate with Zod
+
+```typescript
+const updateFlashcardSchema = z.object({
+  id: z.number().int().positive(),
+  front: z.string().min(1),
+  back: z.string().min(1),
+});
+
+export async function updateFlashcard(input: z.infer<typeof updateFlashcardSchema>) {
+  const validated = updateFlashcardSchema.parse(input);
+  // ... rest of logic
+}
+```
+
+### 2. Always Authenticate
+
+```typescript
+export async function deleteFlashcard(input: { id: number }) {
+  const { userId } = await auth();
+  if (!userId) throw new Error('Unauthorized');
+  
+  // Verify ownership before deletion
+  const [card] = await db.select().from(flashcards)
+    .where(eq(flashcards.id, input.id));
+  
+  if (!card) throw new Error('Not found');
+  
+  const [deck] = await db.select().from(decks)
+    .where(eq(decks.id, card.deckId));
+  
+  if (deck.userId !== userId) throw new Error('Forbidden');
+  
+  await db.delete(flashcards).where(eq(flashcards.id, input.id));
+}
+```
+
+### 3. Use TypeScript Types
+
+```typescript
+// Define input type from Zod schema
+const inputSchema = z.object({
+  deckId: z.number(),
+  front: z.string(),
+  back: z.string(),
+});
+
+type AddFlashcardInput = z.infer<typeof inputSchema>;
+
+// Use the type for parameter
+export async function addFlashcard(input: AddFlashcardInput) {
+  const validated = inputSchema.parse(input);
+  // TypeScript knows the exact shape of validated
+}
+```
+
+## Client-Side Usage
+
+When calling Server Actions from client components, use the `useActionState` hook or `useTransition`:
+
+```typescript
+'use client';
+import { useActionState } from 'react';
+import { createDeck } from '@/actions/deck-actions';
+
+export function CreateDeckForm() {
+  const [state, formAction, isPending] = useActionState(createDeck, null);
+  
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const formData = new FormData(e.currentTarget);
+    
+    // Convert FormData to typed object
+    const input = {
+      title: formData.get('title') as string,
+      description: formData.get('description') as string,
+    };
+    
+    await formAction(input);
+  }
+  
+  return <form onSubmit={handleSubmit}>{/* form fields */}</form>;
+}
+```
+
+## What NOT to Do
+
+- ❌ Don't fetch data in client components with `useEffect` or `fetch`
+- ❌ Don't use API routes for simple CRUD operations
+- ❌ Don't accept `FormData` as the type for Server Action parameters
+- ❌ Don't skip Zod validation for any input data
+- ❌ Don't perform database mutations without Server Actions
+- ❌ Don't forget to authenticate and authorize in Server Actions
+
+## What TO Do
+
+- ✅ Always fetch data in Server Components
+- ✅ Always use Server Actions for mutations
+- ✅ Always validate input with Zod schemas
+- ✅ Always use TypeScript types (derived from Zod) for Server Action parameters
+- ✅ Always authenticate and verify ownership in Server Actions
+- ✅ Convert FormData to typed objects before passing to Server Actions
+- ✅ Use `z.infer<typeof schema>` to generate TypeScript types from Zod schemas
+
+## File Organization
+
+Recommended structure:
+```
+src/
+  actions/           # Server Actions
+    deck-actions.ts
+    flashcard-actions.ts
+  app/              # Server Components (pages)
+    decks/
+      page.tsx      # Fetches data directly
+  components/       # Client Components (if needed)
+    ui/
+  lib/
+    validations.ts  # Shared Zod schemas
+```
