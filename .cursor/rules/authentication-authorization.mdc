@@ -1,3 +1,7 @@
+---
+alwaysApply: true
+---
+
 # Authentication and Authorization Guidelines
 
 All authentication in this project must be handled by Clerk, and users must only be able to access their own data.
