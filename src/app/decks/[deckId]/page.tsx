@@ -12,6 +12,7 @@ import { EditFlashcardDialog } from '@/components/edit-flashcard-dialog';
 import { AddFlashcardDialog } from '@/components/add-flashcard-dialog';
 import { DeleteFlashcardDialog } from '@/components/delete-flashcard-dialog';
 import { DeleteDeckDialog } from '@/components/delete-deck-dialog';
+import { GenerateCardsWithAIButton } from '@/components/generate-cards-with-ai-button';
 
 interface DeckPageProps {
   params: Promise<{
@@ -21,7 +22,7 @@ interface DeckPageProps {
 
 export default async function DeckPage({ params }: DeckPageProps) {
   // Authenticate user
-  const { userId } = await auth();
+  const { userId, has } = await auth();
   
   if (!userId) {
     redirect('/');
@@ -101,6 +102,11 @@ export default async function DeckPage({ params }: DeckPageProps) {
             </div>
 
             <div className="flex gap-2">
+              <GenerateCardsWithAIButton
+                deckId={deckIdNumber}
+                canUseAI={has({ feature: 'ai_flashcard_generation' })}
+                hasDescription={!!deck.description?.trim()}
+              />
               <EditDeckDialog deck={deck} />
               <AddFlashcardDialog deckId={deckIdNumber} />
               <DeleteDeckDialog deck={deck} cardCount={deckFlashcards.length} />
@@ -132,10 +138,17 @@ export default async function DeckPage({ params }: DeckPageProps) {
             <p className="text-muted-foreground mb-6 max-w-md">
               Start building your deck by adding flashcards. Each card has a front (question) and back (answer).
             </p>
-            <AddFlashcardDialog 
-              deckId={deckIdNumber}
-              trigger={<Button size="lg">Add Your First Flashcard</Button>}
-            />
+            <div className="flex flex-wrap gap-3 justify-center">
+              <GenerateCardsWithAIButton
+                deckId={deckIdNumber}
+                canUseAI={has({ feature: 'ai_flashcard_generation' })}
+                hasDescription={!!deck.description?.trim()}
+              />
+              <AddFlashcardDialog
+                deckId={deckIdNumber}
+                trigger={<Button size="lg">Add Your First Flashcard</Button>}
+              />
+            </div>
           </div>
         ) : (
           <div>

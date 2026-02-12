@@ -1,0 +1,68 @@
+---
+alwaysApply: true
+---
+# Vercel AI Flashcard Generation
+
+This project uses the [Vercel AI SDK](https://sdk.vercel.ai/docs/ai-sdk-core/generating-structured-data) (`ai` npm package) with OpenAI for AI features, specifically the AI flashcard generation feature.
+
+## Structured Output for Flashcards
+
+Use `generateText` with `Output.array()` or `Output.object()` to generate validated flashcards. Each card must have `front` and `back` properties matching the schema in [src/db/schema.ts](mdc:src/db/schema.ts).
+
+### Recommended: Output.array() for Direct Array of Cards
+
+Use `Output.array()` when generating a list of flashcards. The number of cards is controlled by the prompt (e.g., "Generate 10 flashcards about...").
+
+```typescript
+import { generateText, Output } from 'ai';
+import { z } from 'zod';
+import { openai } from '@ai-sdk/openai';
+
+const { output } = await generateText({
+  model: openai('gpt-4o'),
+  output: Output.array({
+    element: z.object({
+      front: z.string().describe('The question or term on the front of the card'),
+      back: z.string().describe('The answer or definition on the back of the card'),
+    }),
+    name: 'Flashcards',
+    description: 'An array of flashcards with front and back content',
+  }),
+  prompt: `Generate ${count} flashcards about: ${topic}. Each card must have a front (question/term) and back (answer/definition).`,
+});
+
+// output is Array<{ front: string; back: string }>
+```
+
+### Alternative: Output.object() with Wrapped Array
+
+Use `Output.object()` when you need an object wrapper (e.g., for additional metadata like `topic` or `count`).
+
+```typescript
+import { generateText, Output } from 'ai';
+import { z } from 'zod';
+import { openai } from '@ai-sdk/openai';
+
+const { output } = await generateText({
+  model: openai('gpt-4o'),
+  output: Output.object({
+    schema: z.object({
+      flashcards: z.array(
+        z.object({
+          front: z.string(),
+          back: z.string(),
+        })
+      ),
+    }),
+  }),
+  prompt: `Generate ${count} flashcards about: ${topic}. Return an object with a "flashcards" array. Each card must have "front" and "back" properties.`,
+});
+
+// output.flashcards is Array<{ front: string; back: string }>
+```
+
+## Integration Notes
+
+- **Model**: Use your configured OpenAI model (e.g., `openai('gpt-4o')` or `openai('gpt-4o-mini')`).
+- **Feature gating**: AI flashcard generation requires the `ai_flashcard_generation` feature—check with `has({ feature: 'ai_flashcard_generation' })` in Server Actions before calling. See [clerk-billing.mdc](mdc:.cursor/rules/clerk-billing.mdc).
+- **Database insert**: Map generated cards to the flashcards table schema. Use `db.insert(flashcards).values()` with `deckId`, `front`, and `back` per card.

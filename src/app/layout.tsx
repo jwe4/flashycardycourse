@@ -12,6 +12,7 @@ import { dark } from "@clerk/themes";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Toaster } from "@/components/ui/sonner";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import "./globals.css";
 
 const poppins = Poppins({
@@ -61,7 +62,9 @@ export default function RootLayout({
               </div>
             </div>
           </header>
-          {children}
+          <TooltipProvider>
+            {children}
+          </TooltipProvider>
           <Toaster />
         </body>
       </html>
