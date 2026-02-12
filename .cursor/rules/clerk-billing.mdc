@@ -1,0 +1,192 @@
+---
+alwaysApply: true
+---
+# Clerk Billing Guidelines
+
+This project uses Clerk Billing for subscriptions and payments. All subscription logic, plan checks, and feature gating must use Clerk's built-in billing APIs.
+
+## Plans and Features
+
+### Plans (configured in Clerk Dashboard)
+
+| Plan        | Identifier  |
+|-------------|-------------|
+| Free User   | `free_user` |
+| Pro         | `pro`       |
+
+### Features (configured in Clerk Dashboard)
+
+| Feature                  | Identifier                 |
+|--------------------------|----------------------------|
+| 3 deck limit             | `3_deck_limit`             |
+| Unlimited decks          | `unlimited_decks`          |
+| AI flashcard generation  | `ai_flashcard_generation`  |
+
+## Core Principles
+
+1. **Use Feature-based over Plan-based authorization**: Features are more granular, flexible, and easier to manage. Prefer checking `feature` over `plan` when possible.
+2. **Server-side checks for sensitive data**: `Protect` only visually hides content—it remains in the DOM. For truly restricted data or mutations, use `has()` in Server Actions or Server Components.
+3. **Billing is Beta**: Pin SDK and `clerk-js` versions to avoid breaking changes. See [Clerk pinning docs](https://clerk.com/docs/pinning).
+
+## Access Control Methods
+
+### 1. `has()` (Recommended for logic and Server Actions)
+
+The `has()` helper works client- and server-side. Use it for:
+- Server Actions (block mutations if unauthorized)
+- Server Components (conditionally render or redirect)
+- Route Handlers (return 403 if unauthorized)
+
+**Server-side (Server Components, Server Actions):**
+
+```typescript
+import { auth } from '@clerk/nextjs/server';
+
+// Check by plan
+const { has } = await auth();
+const isPro = has({ plan: 'pro' });
+
+// Check by feature (preferred)
+const canCreateUnlimitedDecks = has({ feature: 'unlimited_decks' });
+const canUseAIGeneration = has({ feature: 'ai_flashcard_generation' });
+const hasDeckLimit = has({ feature: '3_deck_limit' });
+```
+
+**Client-side (Client Components):**
+
+```typescript
+'use client';
+import { useAuth } from '@clerk/nextjs';
+
+const { has } = useAuth();
+const canUseAIGeneration = has({ feature: 'ai_flashcard_generation' });
+```
+
+### 2. `<Protect>` (For UI gating)
+
+Use `<Protect>` to conditionally show/hide UI. Pass a `fallback` prop for unauthorized users.
+
+```typescript
+import { Protect } from '@clerk/nextjs';
+
+// By plan
+<Protect plan="pro" fallback={<p>Upgrade to Pro to access this feature.</p>}>
+  <ProFeature />
+</Protect>
+
+// By feature (preferred)
+<Protect feature="ai_flashcard_generation" fallback={<UpgradePrompt />}>
+  <AIFlashcardGenerator />
+</Protect>
+
+// Conditional logic with condition prop
+<Protect
+  condition={(has) => has({ feature: 'unlimited_decks' }) || has({ feature: '3_deck_limit' })}
+  fallback={<p>Sign in to create decks.</p>}
+>
+  <CreateDeckButton />
+</Protect>
+```
+
+**Important**: `Protect` only visually hides children; they remain in the page source. Do not use it to hide sensitive data. Use `has()` on the server for that.
+
+### 3. `auth.protect()` (For pages and routes)
+
+Use to protect entire pages or route handlers. Throws 404 if unauthorized.
+
+```typescript
+import { auth } from '@clerk/nextjs/server';
+
+// Protect a page
+export default async function ProOnlyPage() {
+  await auth.protect({ plan: 'pro' });
+  return <h1>Pro content</h1>;
+}
+
+// Protect a route handler
+export async function GET() {
+  await auth.protect({ feature: 'ai_flashcard_generation' });
+  return Response.json({ data: '...' });
+}
+```
+
+## Application-Specific Patterns
+
+### Deck limit enforcement
+
+Free users have `3_deck_limit`; Pro users have `unlimited_decks`. Always enforce limits in Server Actions:
+
+```typescript
+// In deck-actions.ts or similar
+const { has } = await auth();
+if (!userId) throw new Error('Unauthorized');
+
+const canCreateMore = has({ feature: 'unlimited_decks' })
+  || (has({ feature: '3_deck_limit' }) && currentDeckCount < 3);
+
+if (!canCreateMore) {
+  throw new Error('Deck limit reached. Upgrade to Pro for unlimited decks.');
+}
+```
+
+### AI flashcard generation
+
+Gate the AI generation UI and the Server Action:
+
+```typescript
+// UI: Use Protect
+<Protect feature="ai_flashcard_generation" fallback={<UpgradeToProCTA />}>
+  <AIGenerateButton />
+</Protect>
+
+// Server Action: Use has()
+const { has } = await auth();
+if (!has({ feature: 'ai_flashcard_generation' })) {
+  throw new Error('AI flashcard generation requires a Pro subscription.');
+}
+```
+
+### Pricing page
+
+Create a dedicated pricing page using Clerk's `<PricingTable />`:
+
+```typescript
+import { PricingTable } from '@clerk/nextjs';
+
+export default function PricingPage() {
+  return (
+    <div className="max-w-4xl mx-auto p-6">
+      <PricingTable />
+    </div>
+  );
+}
+```
+
+## What NOT to Do
+
+- ❌ Don't rely on `Protect` alone to protect sensitive data—it only hides UI
+- ❌ Don't check plan/feature only on the client—always validate in Server Actions
+- ❌ Don't hardcode plan/feature identifiers—use the constants documented above
+- ❌ Don't skip `has()` in Server Actions that perform restricted operations
+
+## What TO Do
+
+- ✅ Use `has()` in Server Actions before any restricted mutation (create deck, AI generation)
+- ✅ Use `Protect` for UI gating with a helpful `fallback` (e.g., upgrade CTA)
+- ✅ Prefer Feature-based (`feature`) over Plan-based (`plan`) checks when possible
+- ✅ Pin Clerk SDK versions while Billing is in Beta
+- ✅ Add a global `ClerkAuthorization` interface for type-safe plan/feature checks (see Clerk docs)
+
+## Type Safety (Optional)
+
+For enhanced type safety, define a global `ClerkAuthorization` interface in `types/globals.d.ts`:
+
+```typescript
+export {};
+declare global {
+  interface ClerkAuthorization {
+    plan: 'free_user' | 'pro';
+    feature: '3_deck_limit' | 'unlimited_decks' | 'ai_flashcard_generation';
+  }
+}
+```

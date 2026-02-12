@@ -24,7 +24,7 @@ export default async function StudyPage({ params }: StudyPageProps) {
   const deckIdNumber = parseInt(deckId, 10);
 
   if (isNaN(deckIdNumber)) {
-    notFound();
+    notFound
   }
 
   // Fetch the deck and verify ownership

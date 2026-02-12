@@ -38,9 +38,14 @@ export default function RootLayout({
         >
           <header className="border-b border-border bg-card/50 backdrop-blur">
             <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-              <Link href="/dashboard" className="text-xl font-bold tracking-tight hover:text-primary transition-colors">
-                FlashyCardy
-              </Link>
+              <div className="flex items-center gap-6">
+                <Link href="/dashboard" className="text-xl font-bold tracking-tight hover:text-primary transition-colors">
+                  FlashyCardy
+                </Link>
+                <Link href="/pricing" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+                  Pricing
+                </Link>
+              </div>
               <div className="flex items-center gap-2">
                 <SignedOut>
                   <SignInButton mode="modal" forceRedirectUrl="/dashboard">

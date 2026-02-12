@@ -11,6 +11,7 @@ import { EditDeckDialog } from '@/components/edit-deck-dialog';
 import { EditFlashcardDialog } from '@/components/edit-flashcard-dialog';
 import { AddFlashcardDialog } from '@/components/add-flashcard-dialog';
 import { DeleteFlashcardDialog } from '@/components/delete-flashcard-dialog';
+import { DeleteDeckDialog } from '@/components/delete-deck-dialog';
 
 interface DeckPageProps {
   params: Promise<{
@@ -102,6 +103,7 @@ export default async function DeckPage({ params }: DeckPageProps) {
             <div className="flex gap-2">
               <EditDeckDialog deck={deck} />
               <AddFlashcardDialog deckId={deckIdNumber} />
+              <DeleteDeckDialog deck={deck} cardCount={deckFlashcards.length} />
             </div>
           </div>
         </div>

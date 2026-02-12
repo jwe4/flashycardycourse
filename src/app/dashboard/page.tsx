@@ -6,10 +6,11 @@ import { eq } from 'drizzle-orm';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { CreateDeckDialog } from '@/components/create-deck-dialog';
 
 export default async function DashboardPage() {
   // Authenticate user
-  const { userId } = await auth();
+  const { userId, has } = await auth();
   
   if (!userId) {
     redirect('/');
@@ -17,6 +18,12 @@ export default async function DashboardPage() {
 
   // Fetch user's decks
   const userDecks = await db.select().from(decks).where(eq(decks.userId, userId));
+
+  // Check if user can create more decks (Pro = unlimited, Free = 3 max)
+  const canCreateUnlimited = has({ feature: 'unlimited_decks' });
+  const hasDeckLimit = has({ feature: '3_deck_limit' });
+  const canCreateDeck =
+    canCreateUnlimited || (hasDeckLimit && userDecks.length < 3);
 
   return (
     <div className="min-h-screen bg-background">
@@ -30,9 +37,19 @@ export default async function DashboardPage() {
               Manage your flashcard decks
             </p>
           </div>
-          <Button size="lg">
-            Create New Deck
-          </Button>
+          {canCreateDeck ? (
+            <CreateDeckDialog>
+              <Button size="lg">
+                Create New Deck
+              </Button>
+            </CreateDeckDialog>
+          ) : (
+            <Button size="lg" asChild>
+              <Link href="/pricing">
+                Upgrade to Pro for Unlimited Decks
+              </Link>
+            </Button>
+          )}
         </div>
 
         {userDecks.length === 0 ? (
@@ -60,9 +77,19 @@ export default async function DashboardPage() {
             <p className="text-muted-foreground mb-6 max-w-md">
               Get started by creating your first flashcard deck. Organize your learning materials and start studying!
             </p>
-            <Button size="lg">
-              Create Your First Deck
-            </Button>
+            {canCreateDeck ? (
+              <CreateDeckDialog>
+                <Button size="lg">
+                  Create Your First Deck
+                </Button>
+              </CreateDeckDialog>
+            ) : (
+              <Button size="lg" asChild>
+                <Link href="/pricing">
+                  Upgrade to Pro for Unlimited Decks
+                </Link>
+              </Button>
+            )}
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
